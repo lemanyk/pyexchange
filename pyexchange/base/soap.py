@@ -13,9 +13,12 @@ from pytz import utc
 
 from ..exceptions import FailedExchangeException
 
+TYPE_NS = u'http://schemas.microsoft.com/exchange/services/2006/types'
 SOAP_NS = u'http://schemas.xmlsoap.org/soap/envelope/'
 
-SOAP_NAMESPACES = {u's': SOAP_NS}
+SOAP_NAMESPACES = {u't': TYPE_NS, u's': SOAP_NS}
+
+T = ElementMaker(namespace=TYPE_NS, nsmap=SOAP_NAMESPACES)
 S = ElementMaker(namespace=SOAP_NS, nsmap=SOAP_NAMESPACES)
 
 log = logging.getLogger('pyexchange')
@@ -25,8 +28,9 @@ class ExchangeServiceSOAP(object):
 
   EXCHANGE_DATE_FORMAT = u"%Y-%m-%dT%H:%M:%SZ"
 
-  def __init__(self, connection):
+  def __init__(self, connection, impersonated_user=None):
     self.connection = connection
+    self.impersonated_user = impersonated_user
 
   def send(self, xml, headers=None, retries=4, timeout=30, encoding="utf-8"):
     request_xml = self._wrap_soap_xml_request(xml)
@@ -66,7 +70,11 @@ class ExchangeServiceSOAP(object):
     return response
 
   def _wrap_soap_xml_request(self, exchange_xml):
-    root = S.Envelope(S.Body(exchange_xml))
+    if self.impersonated_user:
+      impersonation = T.ExchangeImpersonation(T.ConnectingSID(T.PrimarySmtpAddress(self.impersonated_user)))
+      root = S.Envelope(S.Header(impersonation), S.Body(exchange_xml))
+    else:
+      root = S.Envelope(S.Body(exchange_xml))
     return root
 
   def _parse_date(self, date_string):
